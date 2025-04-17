@@ -1,5 +1,7 @@
 # Soal 2
 
+Dikerjakan oleh I Gede Bagus Saka Sinatrya/5027241088
+
 ## a. Mendownload dan Unzip File kemudian di file zip di hapus.
 
 Untuk mendownload secara otomatis kita membuat terlebih dahulu shell script dengan nama starterkit.c kemudian membuat fungsi untuk mendonwload menggunakan
@@ -467,6 +469,12 @@ void note_log(const char *format, ...) {
 - `vfprintf(log, format, args)` menuliskan format dan isi argumen ke file
 - `va_end(args)` membersihkan memori variadic.
 
+## Beberapa Error yang terjadi
 
+![Image](https://github.com/user-attachments/assets/484890e6-1705-492e-bb38-876d8edf246c)
+- Penyebabnya adalah karena pada fungsi donwload zip sebelumnya belum menggunakan execlp sehingga fungsi tidak bisa membaca link yang tertera dari google drive.
 
+![Image](https://github.com/user-attachments/assets/a9607993-6827-4fbe-ab70-5200f88b1637)
+- Penyebabnya karena file tersebut masih terdapat karakter yang tidak termasuk ke dalam algoritma base64 sehingga file di lewati, maka dari itu untuk mengatasinya kita membuat fungsi clean_filename untuk menghilangkan karakter yang tidak diinginkan tersebut.
+- Karena karakter itu juga, maka pada saat melakukan decrypt tidak semua file berhasil di decrypt dan dipindahkan ke folder quarantine.
 
