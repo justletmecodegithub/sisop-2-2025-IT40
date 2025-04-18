@@ -306,7 +306,8 @@ void decode_file() {
     fclose(out);
     printf("file decode udh dibuat dari BrainRot13\n");
 }
-
+```
+# main functionnya
 int main(int argc, char *argv[]) {
     if (argc == 1) {
 
