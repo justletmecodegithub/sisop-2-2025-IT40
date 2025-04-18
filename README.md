@@ -339,7 +339,7 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-```
+
 # Soal 2
 
 Dikerjakan oleh I Gede Bagus Saka Sinatrya/5027241088
