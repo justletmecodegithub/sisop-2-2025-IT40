@@ -10,7 +10,7 @@ import library
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
-Ini semacam alat-alat bantu dari C yang udah disediain. Buat kerjaan file, folder, teks, dan sistem.
+librari template buat manupulasi file, folder, teks(string), dan sistem.
 ```
 decleare Konstanta
 ```
@@ -19,7 +19,7 @@ decleare Konstanta
 #define FILTERED_DIR "Filtered"
 #define GDRIVE_ID "1xFn1OBJUuSdnApDseEczKhtNzyGekauK"
 ```
-bikin nama panggilan biar nggak ngetik panjang-panjang tiap kali mau manggil file atau folder.
+bikin konstanta dulu biar nggak ngetik panjang-panjang tiap kali mau manggil file atau folder.
 
 Deklarasi Fungsi
 ```
@@ -28,7 +28,7 @@ int is_valid_filename(const char *name);
 void traverse_and_filter(const char *base_path);
 void filter_files();
 ```
-Ini bagian “peta-nya”. Nunjukin bakal ada fungsi-fungsi itu nanti. Belum diisi isinya.
+Ini bagian map buat ngepoint bakal ada fungsi-fungsi itu nanti. Belum diisi isinya.
 
 ```
 download_and_extract()
