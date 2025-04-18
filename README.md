@@ -478,3 +478,8 @@ void note_log(const char *format, ...) {
 - Penyebabnya karena file tersebut masih terdapat karakter yang tidak termasuk ke dalam algoritma base64 sehingga file di lewati, maka dari itu untuk mengatasinya kita membuat fungsi clean_filename untuk menghilangkan karakter yang tidak diinginkan tersebut.
 - Karena karakter itu juga, maka pada saat melakukan decrypt tidak semua file berhasil di decrypt dan dipindahkan ke folder quarantine.
 
+# soal 3
+
+dikerjakan oleh Muhammad Ahsani Taqwiim Rakhman
+
+```bash
